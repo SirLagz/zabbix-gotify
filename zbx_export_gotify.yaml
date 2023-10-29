@@ -1,0 +1,109 @@
+zabbix_export:
+  version: '6.4'
+  media_types:
+    - name: Gotify
+      type: WEBHOOK
+      parameters:
+        - name: message
+          value: '{ALERT.MESSAGE}'
+        - name: token
+          value: YOURTOKEN
+        - name: url
+          value: 'http://URL'
+      max_sessions: '0'
+      script: |
+        try {
+            var params = JSON.parse(value),
+                req = new HttpRequest(),
+                response;
+        
+            if (params.HTTPProxy) {
+                req.setProxy(params.HTTPProxy);
+            }
+        
+            req.addHeader('Content-Type: application/x-www-form-urlencoded');
+        
+            Zabbix.log(4, '[ Gotify webhook ] Webhook request with value=' + value);
+        
+            response = req.post(params.url+"/message?token="+params.token, 'message=' + encodeURIComponent(params.message));
+        
+            Zabbix.log(4, '[ Gotify webhook ] Responded with code: ' + req.getStatus() + '. Response: ' + response);
+        
+            if(req.getStatus() == 200) {
+                return 'OK';
+            } else {
+                throw 'Request failed with code '+req.getStatus();
+            }
+            /*
+            try {
+                response = JSON.parse(response);
+            }
+            catch (error) {
+                if (req.getStatus() < 200 || req.getStatus() >= 300) {
+                    throw 'Request failed with status code ' + req.getStatus();
+                }
+                else {
+                    throw 'Request success, but response parsing failed.';
+                }
+            }
+            if (req.getStatus() !== 200 || !response.ok || response.ok === 'false') {
+                throw response.error;
+            }
+            return 'OK';*/
+        }
+        catch (error) {
+            Zabbix.log(3, '[ Gotify webhook ] Sending failed. Error: ' + error);
+            throw 'Failed with error: ' + error;
+        }
+      message_templates:
+        - event_source: TRIGGERS
+          operation_mode: PROBLEM
+          subject: 'Problem: {EVENT.NAME}'
+          message: |
+            Problem started at {EVENT.TIME} on {EVENT.DATE}
+            Problem name: {EVENT.NAME}
+            Host: {HOST.NAME}
+            Severity: {EVENT.SEVERITY}
+            Operational data: {EVENT.OPDATA}
+            Original problem ID: {EVENT.ID}
+            {TRIGGER.URL}
+        - event_source: TRIGGERS
+          operation_mode: RECOVERY
+          subject: 'Resolved: {EVENT.RECOVERY.NAME}'
+          message: |
+            Problem has been resolved at {EVENT.RECOVERY.TIME} on {EVENT.RECOVERY.DATE}
+            Problem name: {EVENT.RECOVERY.NAME}
+            Host: {HOST.NAME}
+            Severity: {EVENT.SEVERITY}
+            Original problem ID: {EVENT.ID}
+            {TRIGGER.URL}
+        - event_source: TRIGGERS
+          operation_mode: UPDATE
+          subject: 'Updated problem: {EVENT.NAME}'
+          message: |
+            {USER.FULLNAME} {EVENT.UPDATE.ACTION} problem at {EVENT.UPDATE.DATE} {EVENT.UPDATE.TIME}.
+            {EVENT.UPDATE.MESSAGE}
+            
+            Current problem status is {EVENT.STATUS}, acknowledged: {EVENT.ACK.STATUS}.
+        - event_source: DISCOVERY
+          operation_mode: PROBLEM
+          subject: 'Discovery: {DISCOVERY.DEVICE.STATUS} {DISCOVERY.DEVICE.IPADDRESS}'
+          message: |
+            Discovery rule: {DISCOVERY.RULE.NAME}
+            
+            Device IP: {DISCOVERY.DEVICE.IPADDRESS}
+            Device DNS: {DISCOVERY.DEVICE.DNS}
+            Device status: {DISCOVERY.DEVICE.STATUS}
+            Device uptime: {DISCOVERY.DEVICE.UPTIME}
+            
+            Device service name: {DISCOVERY.SERVICE.NAME}
+            Device service port: {DISCOVERY.SERVICE.PORT}
+            Device service status: {DISCOVERY.SERVICE.STATUS}
+            Device service uptime: {DISCOVERY.SERVICE.UPTIME}
+        - event_source: AUTOREGISTRATION
+          operation_mode: PROBLEM
+          subject: 'Autoregistration: {HOST.HOST}'
+          message: |
+            Host name: {HOST.HOST}
+            Host IP: {HOST.IP}
+            Agent port: {HOST.PORT}
